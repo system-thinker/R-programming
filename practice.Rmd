@@ -1,0 +1,658 @@
+---
+title: "Morning Letter"
+output: 
+  flexdashboard::flex_dashboard:
+  orientation: columns
+vertical_layout: fill
+---
+  
+  
+```{r setup, include=FALSE}
+
+rm(list=ls())
+
+library(flexdashboard)
+library(XML)
+library(rvest)
+library(stringr)
+library(DT)
+library(knitr)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(httr)
+library(readxl)
+library(writexl)
+library(jsonlite)
+library(kableExtra)
+library(DT)
+
+
+## 날짜 및 시간 설정
+now <- Sys.time()
+today.m0 <- now %m-% days(0) %>% format("%Y.%m.%d.")
+today.m1 <- now %m-% days(1) %>% format("%Y.%m.%d.")
+today.m2 <- now %m-% days(2) %>% format("%Y.%m.%d.")
+today.m3 <- now %m-% days(3) %>% format("%Y.%m.%d.")
+today.m4 <- now %m-% days(4) %>% format("%Y.%m.%d.")
+today.m5 <- now %m-% days(5) %>% format("%Y.%m.%d.")
+today.m6 <- now %m-% days(6) %>% format("%Y.%m.%d.")
+today.m7 <- now %m-% days(7) %>% format("%Y.%m.%d.")
+
+
+## 팟빵 에피소드 수집 함수 선언
+podbbang <- function(channel.id) {
+  
+  URL <- str_c("http://www.podbbang.com/_m_api/podcasts/", channel.id, "/episodes?offset=0&sort=pubdate:desc&episode_id=0&limit=8&with=summary&cache=0")
+  
+  txt <- readLines(URL, warn=FALSE)
+  
+  df <- fromJSON(txt)$data %>% 
+    select(published_at, title, duration)
+  
+  names(df) <- c("date", "title", "duration")
+  
+  df$date <- df$date %>% 
+    as.Date() %>% 
+    format("%y.%m.%d")
+  
+  df$title <- df$title %>% 
+    str_remove_all("^[0-9]{2}/[0-9]{2} -") %>% 
+    str_trim()
+  
+  return(df)
+  
+}
+
+
+## Naver News Keyword Search
+naver.news.api.search <-function(keyword) {
+  
+searchUrl <- "https://openapi.naver.com/v1/search/news.xml"
+client_id <- "M4g9rW2aSU0zNVXbp0Ve"
+client_secret <- "gfr6xh20HF"
+
+search.word <- keyword
+query <- search.word %>% 
+  enc2utf8() %>% 
+  URLencode()
+
+url <- str_c(searchUrl, "?query=", query, "&display=20")
+
+res <- GET(url, 
+           add_headers("X-Naver-Client-Id"=client_id, 
+                       "X-Naver-Client-Secret"=client_secret))
+doc <- toString(res)
+
+xmlFile <- xmlParse(doc)
+xmlRoot(xmlFile)
+df <- xmlToDataFrame(getNodeSet(xmlFile, "//item"), stringsAsFactors = FALSE)
+  
+}
+
+```
+
+
+
+1. News
+=======================================================================
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+### Chart A1 (**Issued at `r now`**)
+
+**네이버 뉴스 검색**
+
+```{r}
+list <- c("은행", "정부")
+Stack <- NULL
+for (keyword in list) {
+  
+  query <- keyword
+  tab <- naver.news.api.search(query)
+  tab <- cbind(query, tab) 
+  tab <- tab %>% select(-originallink, -description)
+  tab <- tab %>% 
+    mutate(pubDate = str_remove(pubDate, " \\d{2}:.+")) %>% 
+    mutate(title = str_replace_all(title, "&quot;", '"'))
+
+  Stack <- rbind(Stack, tab) 
+  
+}
+
+names(Stack) <- c("Search", "Title", "Link", "Date")
+
+df <- Stack %>%
+  mutate(Title = cell_spec(Title, "html", link = Link, color="#062872")) %>% 
+  select(Date, Search, Title)
+
+df %>% 
+  kable(escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  column_spec(1, width = "10em") %>%
+  column_spec(2, width = "10em") %>%
+  column_spec(3, width = "30em")
+```
+
+
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+### Chart B1
+
+**네이버 뉴스 검색**
+
+```{r}
+list <- c("금리", "화폐")
+Stack <- NULL
+for (keyword in list) {
+  
+  query <- keyword
+  tab <- naver.news.api.search(query)
+  tab <- cbind(query, tab) 
+  tab <- tab %>% select(-originallink, -description)
+  tab <- tab %>% 
+    mutate(pubDate = str_remove(pubDate, " \\d{2}:.+")) %>% 
+    mutate(title = str_replace_all(title, "&quot;", '"'))
+
+  Stack <- rbind(Stack, tab) 
+  
+}
+
+names(Stack) <- c("Search", "Title", "Link", "Date")
+
+df <- Stack %>%
+  mutate(Title = cell_spec(Title, "html", link = Link, color="#062872")) %>% 
+  select(Date, Search, Title)
+
+df %>% 
+  kable(escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  column_spec(1, width = "10em") %>%
+  column_spec(2, width = "10em") %>%
+  column_spec(3, width = "30em")
+```
+
+
+
+
+2. Podcast
+=======================================================================
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+### 경제 및 시사 (**Issued at `r now`**)
+
+[Youtube Julius Chun](https://www.youtube.com/channel/UChdVrewKcV9b_PMmvscTdGg), [Youtube 슈가월드](https://www.youtube.com/channel/UCsJ6RuBiTVWRX156FVbeaGg)
+
+```{r}
+channel.name <- "김동환 이진우 정영진의 신과함께"
+channel.id <- 15781
+
+df<-podbbang(channel.id)
+df %>% head(10) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  column_spec(1, width = "6em") %>%
+  column_spec(2, width = "35em") %>%
+  column_spec(3, width = "6em")
+```
+
+
+
+
+### 통계 및 데이터
+
+[데이터홀릭](http://www.podbbang.com/ch/1771386)
+[Youtube 곽기영](https://www.youtube.com/channel/UC2bYkgsEdEsY0eshZpps2aQ), [Youtube 통계파랑](https://www.youtube.com/user/gmlcjf0807)
+
+
+```{r}
+channel.name <- "데이터홀릭"
+channel.id <- 1771386
+
+df<-podbbang(channel.id)
+df %>% head(10) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  column_spec(1, width = "6em") %>%
+  column_spec(2, width = "35em") %>%
+  column_spec(3, width = "6em")
+```
+
+
+
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Chart B1
+
+[김종배의 시선집중](http://www.podbbang.com/ch/61), [Youtube MBC라디오](https://www.youtube.com/channel/UCTTmtS2ljy1vyl_s-d_LEHQ/playlists)
+
+```{r}
+channel.name <- "김종배의 시선집중"
+channel.id <- 61
+
+df<-podbbang(channel.id)
+df %>% head(10) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  column_spec(1, width = "6em") %>%
+  column_spec(2, width = "35em") %>%
+  column_spec(3, width = "6em")
+```
+
+
+
+### Chart B2
+
+[세바시](http://www.podbbang.com/ch/222)
+
+```{r}
+channel.name <- "세바시"
+channel.id <- 222
+
+df<-podbbang(channel.id)
+df %>% head(10) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  column_spec(1, width = "6em") %>%
+  column_spec(2, width = "35em") %>%
+  column_spec(3, width = "6em")
+```
+3. FED NEWS
+=======================================================================
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Chart A
+
+```{r, include=FALSE}
+library(readr);library(dplyr);library(rvest);library(stringr);library(quantmod);library(forecast);library(lubridate);library(zoo);library(xts);library(ggplot2);library(rvest)
+
+#====================================================================
+#                         2. Web scraping
+#====================================================================
+
+URL <- "https://www.global-rates.com/en/interest-rates/central-banks/central-bank-america/fed-interest-rate.aspx"
+
+res <- read_html(URL) 
+tab <- res %>% 
+  html_table() %>% 
+  .[[20]] 
+tab
+df <- tab %>% slice(-1)
+names(df)[1] <- "date"
+names(df)[2] <- "base_rate(%)"
+df
+
+# 문자, 숫자가 포함된 chr 속성의 날짜 데이터를 ISO 8601로 전환
+df$date <- parse_date_time(x = df$date, orders = c("%m/%d/%Y"))
+# UTC제거 및 dttm 속성을 date 속성으로 전환
+df$date <- as.Date(df$date, format=c("%Y/%m/%d"))
+
+# 정갈하게 보이기 위해 % 제거
+#df$`base_rate(%)` <- str_remove_all(df$`base_rate(%)`, "%")
+# 숫자 파싱
+df$`base_rate(%)`<- parse_number(df$`base_rate(%)`)
+
+
+# 오름차순 정리 
+df <- df %>% arrange(df$date)
+```
+```{r}
+ggplot(df, mapping= aes(x=date,y=`base_rate(%)`)) +
+  geom_step()+
+  xlab("date")+
+  ylab("base_rate(%)")+
+  ggtitle("FED latest interest rate changes")+
+  theme(plot.title=element_text(face="bold", size=15, hjust=0.5, color="black"))
+```
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Chart B
+
+```{r}
+list <- c("연준", "FED")
+Stack <- NULL
+for (keyword in list) {
+  
+  query <- keyword
+  tab <- naver.news.api.search(query)
+  tab <- cbind(query, tab) 
+  tab <- tab %>% select(-originallink, -description)
+  tab <- tab %>% 
+    mutate(pubDate = str_remove(pubDate, " \\d{2}:.+")) %>% 
+    mutate(title = str_replace_all(title, "&quot;", '"'))
+
+  Stack <- rbind(Stack, tab) 
+  
+}
+
+names(Stack) <- c("Search", "Title", "Link", "Date")
+
+df <- Stack %>%
+  mutate(Title = cell_spec(Title, "html", link = Link, color="#062872")) %>% 
+  select(Date, Search, Title)
+
+df %>% 
+  kable(escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  column_spec(1, width = "10em") %>%
+  column_spec(2, width = "10em") %>%
+  column_spec(3, width = "30em")
+```
+
+### Chart C
+
+```{r}
+list <- c("옐런", "디폴트")
+Stack <- NULL
+for (keyword in list) {
+  
+  query <- keyword
+  tab <- naver.news.api.search(query)
+  tab <- cbind(query, tab) 
+  tab <- tab %>% select(-originallink, -description)
+  tab <- tab %>% 
+    mutate(pubDate = str_remove(pubDate, " \\d{2}:.+")) %>% 
+    mutate(title = str_replace_all(title, "&quot;", '"'))
+
+  Stack <- rbind(Stack, tab) 
+  
+}
+
+names(Stack) <- c("Search", "Title", "Link", "Date")
+
+df <- Stack %>%
+  mutate(Title = cell_spec(Title, "html", link = Link, color="#062872")) %>% 
+  select(Date, Search, Title)
+
+df %>% 
+  kable(escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  column_spec(1, width = "10em") %>%
+  column_spec(2, width = "10em") %>%
+  column_spec(3, width = "30em")
+```
+
+
+
+
+4. Cryptocurrency
+=======================================================================
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Closed Price: ETH
+
+```{r, include=FALSE}
+library(quantmod)
+library(dygraphs)
+library(highcharter)
+library(PerformanceAnalytics)
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(changepoint)
+library(zoo)
+library(forecast)
+library(urca)
+#ETHERIUM
+getSymbols('ETH')
+head(ETH)
+prices=Cl(ETH)
+```
+
+```{r, include=FALSE}
+ret_yearly = prices %>% 
+  Return.calculate() %>% 
+  apply.yearly(., Return.cumulative) %>% 
+  round(4) %>% 
+  fortify.zoo() %>% 
+  mutate(Index = as.numeric(substring(Index, 1, 4)))
+
+```
+
+```{r}
+## Closed Price of ETH
+highchart(type='stock') %>% 
+  hc_add_series(prices) %>% 
+  hc_scrollbar(enable=FALSE)
+```
+
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Return of Year:ETH
+
+```{r}
+## Return of ETHERIUM
+ggplot(ret_yearly, aes(x = Index, y = ETH.Close)) +
+  geom_bar(stat='identity')+
+  scale_x_continuous(breaks = ret_yearly$Index,
+                     expand = c(0.01, 0.01)) +
+  geom_text(aes(label=paste(round(ETH.Close * 100,2), "%"),
+            vjust=ifelse(ETH.Close >=0, -0.5,1.5)),
+            position = position_dodge(width = 1),
+            size=3) +
+  xlab(NULL) + ylab(NULL)
+
+```
+
+### GARCH Model: ETH
+
+```{r, include=FALSE}
+#GARCH
+library(rugarch)
+#ARMA(1,1)
+ethSpec1 <- ugarchspec(variance.model = list(model="sGARCH", garchOrder=c(1,1)), mean.model = list(armaOrder=c(1,1)), distribution.model = "std")
+#ARMA(0,0)
+ethSpec2 <- ugarchspec(variance.model = list(model="sGARCH", garchOrder=c(1,1)), mean.model = list(armaOrder=c(0,0)), distribution.model = "std")
+#ARMA(0,2)
+ethSpec3 <- ugarchspec(variance.model = list(model="sGARCH", garchOrder=c(1,1)), mean.model = list(armaOrder=c(0,2)), distribution.model = "std")
+#ARMA(1,2)
+ethSpec4 <- ugarchspec(variance.model = list(model="sGARCH", garchOrder=c(1,1)), mean.model = list(armaOrder=c(1,2)), distribution.model = "std")
+
+ethGarch1 <- ugarchfit(spec = ethSpec1, data=prices)
+ethGarch2 <- ugarchfit(spec = ethSpec2, data=prices)
+ethGarch3 <- ugarchfit(spec = ethSpec3, data=prices)
+ethGarch4 <- ugarchfit(spec = ethSpec4, data=prices)
+
+infocriteria(ethGarch1)
+infocriteria(ethGarch2)
+infocriteria(ethGarch3)
+infocriteria(ethGarch4)
+
+ethPred <- ugarchboot(ethGarch1, n.ahead = 50, method=c("Partial","Full")[1])
+par(mfrow=c(1,3))
+```
+
+```{r}
+plot(ethGarch1@fit$residuals, type='l')
+plot(ethGarch1,which=10)
+plot(ethPred, which=2)
+```
+
+
+
+
+
+5. Insigtful Cloud - Prof. Choi Jae sung Research Field Cloud
+=======================================================================
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Prof. J.S Choi 
+
+```{r, include=FALSE}
+library(tidyverse)
+library(httr)
+library(rvest)
+library(KoNLP)
+library(dplyr)
+library(tidytext)
+library(wordcloud)
+library(ggwordcloud)
+library(RColorBrewer)
+useNIADic()
+## Choi Jae Jung 페이지
+URL <- "https://scholar.google.com/citations?user=NzQpzcgAAAAJ&hl=en"
+res <- read_html(URL)
+
+
+pattern <- "#gsc_a_b > tr > td.gsc_a_t > a"
+choi_raw <- res %>% 
+  html_nodes(pattern) %>% 
+  html_text()
+choi_raw
+choi_raw <- gsub("and","",choi_raw)
+choi_raw <- gsub("of","",choi_raw)
+choi_raw <- gsub("the","",choi_raw)
+choi_raw <- gsub("The","",choi_raw)
+choi_raw <- gsub("from","",choi_raw)
+choi_raw <- gsub("rom","",choi_raw)
+choi <- choi_raw %>% 
+  as_tibble()
+
+choi
+
+word_noun <- choi %>% 
+  unnest_tokens(input = value,
+                output = word,
+                token = "words")
+
+word_noun <- word_noun %>% 
+  count(word, sort = T) %>% 
+  filter(str_count(word) > 2)
+
+word_noun
+```
+
+```{r}
+ggplot(word_noun, aes(label = word, size = n, col=n)) +
+  geom_text_wordcloud(seed = 1234) +
+  scale_radius(limits = c(3, NA),
+               range = c(4, 15)) +
+  scale_color_gradient(low = "#66aaf2",
+                       high = "#004EA1")+
+  theme_minimal()
+```
+
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Prof. J.S Choi  Frequency
+
+```{r}
+top10 <- word_noun %>% head(10)
+ggplot(top10, aes(reorder(word, n), y = n))+
+  geom_col()+
+  coord_flip()
+```
+
+### Prof. J.S Choi 
+
+```{r, include=FALSE}
+tab <- res %>% 
+  html_table() %>% 
+  .[[2]]
+
+names(tab) <- c("title", "citation", "year") # dplyr::slice()를 적용하기 위해서는 변수명 필요
+tab <- tab %>% slice(-1) # Table 헤더값이 들어간 첫 줄은 삭제
+
+```
+
+```{r}
+head(tab)
+```
+
+
+
+
+
+6. Insigtful Cloud - Daran Acemoglu
+=======================================================================
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### ACEMOGLU CLOUD
+
+```{r, include=FALSE}
+URL <- "https://scholar.google.com/citations?user=l9Or8EMAAAAJ&hl=en"
+res <- read_html(URL)
+pattern <- "#gsc_a_b > tr > td.gsc_a_t > a"
+interest_raw <- res %>% 
+  html_nodes(pattern) %>% 
+  html_text()
+interest_raw
+
+acemo <- interest_raw %>% 
+  as_tibble()
+
+acemo
+
+word_noun_ace <- acemo %>% 
+  unnest_tokens(input = value,
+                output = word,
+                token = "words")
+
+
+word_noun_ace <- word_noun_ace %>% 
+  count(word, sort = T) %>% 
+  filter(str_count(word) > 3)
+
+
+
+```
+
+```{r}
+ggplot(word_noun_ace, aes(label = word, size = n, col=n)) +
+  geom_text_wordcloud(seed = 1234) +
+  scale_radius(limits = c(3, NA),
+               range = c(4, 15)) +
+  scale_color_gradient(low = "#66aaf2",
+                       high = "#004EA1")+
+  theme_minimal()
+```
+
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### DARAN ACEMOGLU Frequency
+
+```{r}
+top10_ace <- word_noun_ace %>% head(10)
+ggplot(top10_ace, aes(reorder(word, n), y = n))+
+  geom_col()+
+  coord_flip()
+```
+
+### DARAN ACEMOGLU 
+
+```{r, include=FALSE}
+tab <- res %>% 
+  html_table() %>% 
+  .[[2]]
+
+names(tab) <- c("title", "citation", "year") # dplyr::slice()를 적용하기 위해서는 변수명 필요
+tab <- tab %>% slice(-1) # Table 헤더값이 들어간 첫 줄은 삭제
+
+```
+
+```{r}
+head(tab)
+```
+
+
+
